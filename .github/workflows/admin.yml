@@ -36,9 +36,9 @@ jobs:
 
           # Replace this with a new valid download URL.
           # Use "&", not "&amp;".
-          INPUT_URL="https://movies-bot.sujanbotx.workers.dev/46208/?hash=AgADzQ"
+          INPUT_URL="https://cdn.cdngo.site/Peddi_2026_Telugu_720p.mkv"
 
-          OUTPUT_FOLDER="PP/EP1"
+          OUTPUT_FOLDER="peddi"
           OUTPUT_PATH="${OUTPUT_FOLDER}/playlist.m3u8"
 
           echo "Preparing output directory..."
@@ -110,7 +110,7 @@ jobs:
           git config user.name "pothabattulavinod"
           git config user.email "vinodyadavpothabattula666@gmail.com"
 
-          git add -A PP/EP1
+          git add -A peddi
 
           if git diff --cached --quiet; then
             echo "No new or changed HLS files to commit."
