@@ -1,0 +1,146 @@
+name: Telugu Audio-Only HLS - Maximum Compatibility
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      # 1. Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # 2. Install FFmpeg
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+          ffmpeg -version
+          ffprobe -version
+
+      # 3. Create audio-only HLS
+      - name: Convert Telugu audio to compatible HLS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          INPUT_URL="https://dn711408.ca.archive.org/0/items/varsham-2004-telugu-true-hdrip-1080p/Varsham%202004_Telugu_True_HDRip_1080p.mkv"
+
+          OUTPUT_FOLDER="varsham-audio"
+          OUTPUT_PATH="${OUTPUT_FOLDER}/playlist.m3u8"
+
+          rm -rf "${OUTPUT_FOLDER}"
+          mkdir -p "${OUTPUT_FOLDER}"
+
+          echo "Checking source audio stream..."
+
+          ffprobe \
+            -v error \
+            -select_streams a:0 \
+            -show_entries stream=index,codec_name,channels,sample_rate,bit_rate:stream_tags=language,title \
+            -of default=noprint_wrappers=1 \
+            "${INPUT_URL}"
+
+          echo "Creating audio-only HLS..."
+          echo "Input audio: original Telugu AC-3"
+          echo "Output audio: AAC-LC stereo"
+          echo "Compatibility: older browsers, phones, TVs, and media players"
+
+          ffmpeg -y \
+            -i "${INPUT_URL}" \
+            -map 0:a:0 \
+            -vn \
+            -sn \
+            -dn \
+            -c:a aac \
+            -profile:a aac_low \
+            -b:a 128k \
+            -ac 2 \
+            -ar 44100 \
+            -aac_coder twoloop \
+            -metadata:s:a:0 language=tel \
+            -metadata:s:a:0 title="Telugu AAC Stereo" \
+            -f hls \
+            -hls_time 10 \
+            -hls_playlist_type vod \
+            -hls_flags independent_segments \
+            -hls_segment_type mpegts \
+            -hls_segment_filename "${OUTPUT_FOLDER}/segment%05d.ts" \
+            "${OUTPUT_PATH}"
+
+          echo "Checking generated playlist..."
+
+          if [ ! -s "${OUTPUT_PATH}" ]; then
+            echo "ERROR: HLS playlist was not generated."
+            exit 1
+          fi
+
+          SEGMENT_COUNT="$(
+            find "${OUTPUT_FOLDER}" \
+              -maxdepth 1 \
+              -type f \
+              -name 'segment*.ts' \
+              | wc -l
+          )"
+
+          if [ "${SEGMENT_COUNT}" -eq 0 ]; then
+            echo "ERROR: No HLS audio segments were generated."
+            exit 1
+          fi
+
+          echo "Checking playlist contents..."
+
+          if ! grep -q "#EXTM3U" "${OUTPUT_PATH}"; then
+            echo "ERROR: Invalid HLS playlist."
+            exit 1
+          fi
+
+          echo "Audio-only HLS conversion completed successfully."
+          echo "Playlist: ${OUTPUT_PATH}"
+          echo "Segments generated: ${SEGMENT_COUNT}"
+
+          du -sh "${OUTPUT_FOLDER}"
+
+      # 4. Commit and push HLS files
+      - name: Commit and push audio HLS output
+        shell: bash
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_PAT:-}" ]; then
+            echo "ERROR: GH_PAT secret is not configured."
+            exit 1
+          fi
+
+          git config user.name "pothabattulavinod"
+          git config user.email "vinodyadavpothabattula666@gmail.com"
+
+          git add -A varsham-audio
+
+          if git diff --cached --quiet; then
+            echo "No new or changed audio HLS files to commit."
+            exit 0
+          fi
+
+          git commit -m "Add Telugu compatible audio-only HLS [skip ci]"
+
+          git remote remove origin || true
+
+          git remote add origin \
+            "https://x-access-token:${GH_PAT}@github.com/pothabattulavinod/adc11.git"
+
+          git push origin HEAD:main
+
+          echo "Audio HLS files pushed successfully."
