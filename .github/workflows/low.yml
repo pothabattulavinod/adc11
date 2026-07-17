@@ -1,0 +1,160 @@
+name: MKV to Lo HLS - Compressed Telugu 5.1 Under 1.6GB
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      # 1. Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # 2. Install FFmpeg
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+          ffmpeg -version
+          ffprobe -version
+
+      # 3. Convert MKV to compressed HLS
+      - name: Convert MKV to HLS under 1.6GB
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          INPUT_URL="https://dn711408.ca.archive.org/0/items/varsham-2004-telugu-true-hdrip-1080p/Varsham%202004_Telugu_True_HDRip_1080p.mkv"
+
+          OUTPUT_FOLDER="varsham"
+          OUTPUT_PATH="${OUTPUT_FOLDER}/playlist.m3u8"
+
+          # Maximum allowed output size:
+          # 1,600,000,000 bytes = 1.6 GB decimal
+          MAX_BYTES=1600000000
+
+          echo "Preparing output directory..."
+
+          rm -rf "${OUTPUT_FOLDER}"
+          mkdir -p "${OUTPUT_FOLDER}"
+
+          echo "Checking available streams..."
+
+          ffprobe \
+            -v error \
+            -show_entries stream=index,codec_type,codec_name,width,height,channels,bit_rate:stream_tags=language,title \
+            -of default=noprint_wrappers=1 \
+            "${INPUT_URL}"
+
+          echo "Starting conversion..."
+          echo "Video: H.264 compressed at approximately 1000 kbps"
+          echo "Audio: Telugu AC-3 5.1 copied without re-encoding"
+
+          ffmpeg -y \
+            -i "${INPUT_URL}" \
+            -map 0:v:0 \
+            -map 0:a:m:language:tel \
+            -sn \
+            -dn \
+            -c:v libx264 \
+            -preset slow \
+            -b:v 1000k \
+            -maxrate 1100k \
+            -bufsize 2200k \
+            -pix_fmt yuv420p \
+            -profile:v high \
+            -level:v 4.1 \
+            -force_key_frames "expr:gte(t,n_forced*10)" \
+            -c:a copy \
+            -metadata:s:a:0 language=tel \
+            -metadata:s:a:0 title="Telugu 5.1 AC-3" \
+            -f hls \
+            -hls_time 10 \
+            -hls_playlist_type vod \
+            -hls_flags independent_segments \
+            -hls_segment_type mpegts \
+            -hls_segment_filename "${OUTPUT_FOLDER}/segment%05d.ts" \
+            "${OUTPUT_PATH}"
+
+          echo "Checking generated playlist..."
+
+          if [ ! -s "${OUTPUT_PATH}" ]; then
+            echo "ERROR: HLS playlist was not generated."
+            exit 1
+          fi
+
+          SEGMENT_COUNT="$(
+            find "${OUTPUT_FOLDER}" \
+              -maxdepth 1 \
+              -type f \
+              -name 'segment*.ts' \
+              | wc -l
+          )"
+
+          if [ "${SEGMENT_COUNT}" -eq 0 ]; then
+            echo "ERROR: No HLS segments were generated."
+            exit 1
+          fi
+
+          OUTPUT_BYTES="$(du -sb "${OUTPUT_FOLDER}" | awk '{print $1}')"
+          OUTPUT_GB="$(awk "BEGIN {printf \"%.2f\", ${OUTPUT_BYTES}/1000000000}")"
+
+          echo "HLS conversion completed."
+          echo "Playlist: ${OUTPUT_PATH}"
+          echo "Segments generated: ${SEGMENT_COUNT}"
+          echo "Total output size: ${OUTPUT_GB} GB"
+
+          if [ "${OUTPUT_BYTES}" -gt "${MAX_BYTES}" ]; then
+            echo "ERROR: HLS output is larger than 1.6 GB."
+            echo "Reducing the bitrate is required."
+            rm -rf "${OUTPUT_FOLDER}"
+            exit 1
+          fi
+
+          echo "Output is within the 1.6 GB limit."
+
+          du -sh "${OUTPUT_FOLDER}"
+
+      # 4. Commit and push generated HLS files
+      - name: Commit and push HLS output
+        shell: bash
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_PAT:-}" ]; then
+            echo "ERROR: GH_PAT secret is not configured."
+            exit 1
+          fi
+
+          git config user.name "pothabattulavinod"
+          git config user.email "vinodyadavpothabattula666@gmail.com"
+
+          git add -A varsham
+
+          if git diff --cached --quiet; then
+            echo "No new or changed HLS files to commit."
+            exit 0
+          fi
+
+          git commit -m "Add compressed Telugu HLS output under 1.6GB [skip ci]"
+
+          git remote remove origin || true
+
+          git remote add origin \
+            "https://x-access-token:${GH_PAT}@github.com/pothabattulavinod/adc11.git"
+
+          git push origin HEAD:main
+
+          echo "HLS files pushed successfully."
