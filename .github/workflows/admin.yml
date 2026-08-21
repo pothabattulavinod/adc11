@@ -36,9 +36,9 @@ jobs:
 
           # Replace this with a new valid download URL.
           # Use "&", not "&amp;".
-          INPUT_URL="https://cdn.cdngo.site/Lenin_2026_Telugu_720p.mkv"
+          INPUT_URL="https://nw20.seedr.cc/ff_get/8469119/5975753107/www.5MovieRulz.company%20-%20Chennai%20Love%20Story%20(2026)%20720p%20Telugu%20HQ%20HDRip%20-%20HEVC%20-%20(DD_5.1%20-%20192Kbps%20_%20AAC)%20-%201.3GB%20-%20ESub.mkv?st=JWu8bA1gON3RBCd164Kr7w&e=1787363640"
 
-          OUTPUT_FOLDER="len"
+          OUTPUT_FOLDER="cls"
           OUTPUT_PATH="${OUTPUT_FOLDER}/playlist.m3u8"
 
           echo "Preparing output directory..."
@@ -110,7 +110,7 @@ jobs:
           git config user.name "pothabattulavinod"
           git config user.email "vinodyadavpothabattula666@gmail.com"
 
-          git add -A len
+          git add -A cls
 
           if git diff --cached --quiet; then
             echo "No new or changed HLS files to commit."
